@@ -18,18 +18,8 @@
     "MessageTypes": [
       {
         "id": 0,
-        "label": "Show Speed Value",
-        "description": "$ will be displayed as Speed value"
-      },
-      {
-        "id": 1,
-        "label": "Show Heading Value",
-        "description": "$ will be displayed as Heading value"
-      },
-      {
-        "id": 2,
-        "label": "Show AP On/Off",
-        "description": "0 = True, 1 = False"
+        "label": "Vertical Speed",
+        "description": "Vertical speed in feet per minute (FPM). Positive values indicate climb; negative values indicate descent."
       }
     ]
   }

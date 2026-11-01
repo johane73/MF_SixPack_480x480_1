@@ -70,12 +70,15 @@ MFCustomDevice::MFCustomDevice()
 
 void MFCustomDevice::attach(uint16_t adrPin, uint16_t adrType, uint16_t adrConfig, bool configFromFlash)
 {
+    #if 0
     Serial.println("[myTest] MFCustomDevice::attach ENTERED");
-    Serial.printf("[myTest] attach called: adrPin=%u adrType=%u adrConfig=%u flash=%d\n",
-                  adrPin, adrType, adrConfig, configFromFlash);
+    Serial.printf("[myTest] attach called: adrPin=%u adrType=%u adrConfig=%u flash=%d\n", adrPin, adrType, adrConfig, configFromFlash);
+    #endif
 
     if (adrPin == 0) {
+        #if 0
         Serial.println("[myTest] EXIT: adrPin is zero");
+        #endif
         return;
     }
 
@@ -84,54 +87,62 @@ void MFCustomDevice::attach(uint16_t adrPin, uint16_t adrType, uint16_t adrConfi
     uint8_t _pin1, _pin2, _pin3;
 
     getStringFromMem(adrType, parameter, configFromFlash);
+    #if 0
     Serial.printf("[myTest] Device type='%s'\n", parameter);
+    #endif
 
     if (strcmp(parameter, "myTest") == 0)
         _customType = MY_CUSTOM_DEVICE_1;
     else if (strcmp(parameter, "myTest2") == 0)
         _customType = MY_CUSTOM_DEVICE_2;
 
-    Serial.printf("[myTest] customType=%u sizeof(myTest)=%u\n",
-                  _customType, (unsigned)sizeof(myTest));
+    #if 0
+    Serial.printf("[myTest] customType=%u sizeof(myTest)=%u\n", _customType, (unsigned)sizeof(myTest));
+    #endif
 
     if (_customType == MY_CUSTOM_DEVICE_1) {
         if (!FitInMemory(sizeof(myTest))) {
+            #if 0
             Serial.println("[myTest] EXIT: insufficient device memory");
+            #endif
             cmdMessenger.sendCmd(kStatus, F("Custom Device does not fit in Memory"));
             return;
         }
 
+        #if 0
         Serial.println("[myTest] Memory check passed");
-
-        getStringFromMem(adrPin, parameter, configFromFlash);
+        #endif
+        // Read the three configured pins
+        if (!getStringFromMem(adrPin, parameter, configFromFlash)) {
+            cmdMessenger.sendCmd(kStatus, F("Failed to read custom device pins"));
+            return;
+        }
 
         params = strtok_r(parameter, "|", &p);
+        if (params == NULL) {
+            cmdMessenger.sendCmd(kStatus, F("Missing custom device pin 1"));
+            return;
+        }
         _pin1 = atoi(params);
+
         params = strtok_r(NULL, "|", &p);
+        if (params == NULL) {
+            cmdMessenger.sendCmd(kStatus, F("Missing custom device pin 2"));
+            return;
+        }
         _pin2 = atoi(params);
+
         params = strtok_r(NULL, "|", &p);
+        if (params == NULL) {
+            cmdMessenger.sendCmd(kStatus, F("Missing custom device pin 3"));
+            return;
+        }
         _pin3 = atoi(params);
 
-        getStringFromMem(adrConfig, parameter, configFromFlash);
-
-        uint16_t Parameter1;
-        char *Parameter2;
-
-        params = strtok_r(parameter, "|", &p);
-        Parameter1 = atoi(params);
-        params = strtok_r(NULL, "|", &p);
-        Parameter2 = params;
-
-        Serial.println("[myTest] Constructing object");
-        _mydevice = new (allocateMemory(sizeof(myTest))) myTest(_pin1, _pin2);
-
-        Serial.println("[myTest] Calling attach");
-        _mydevice->attach(Parameter1, Parameter2);
-
-        Serial.println("[myTest] Calling begin");
+        // Construct and initialize the custom device
+        _mydevice = new (allocateMemory(sizeof(myTest))) myTest(_pin1, _pin2, "myTest 1");
+        _mydevice->attach(_pin3, nullptr);
         _mydevice->begin();
-
-        Serial.println("[myTest] Initialization complete");
         _initialized = true;
     }
     else if (_customType == MY_CUSTOM_DEVICE_2) {
@@ -140,32 +151,43 @@ void MFCustomDevice::attach(uint16_t adrPin, uint16_t adrType, uint16_t adrConfi
             return;
         }
 
-        getStringFromMem(adrPin, parameter, configFromFlash);
+        // Read the three configured pins
+        if (!getStringFromMem(adrPin, parameter, configFromFlash)) {
+            cmdMessenger.sendCmd(kStatus, F("Failed to read custom device pins"));
+            return;
+        }
 
         params = strtok_r(parameter, "|", &p);
+        if (params == NULL) {
+            cmdMessenger.sendCmd(kStatus, F("Missing custom device pin 1"));
+            return;
+        }
         _pin1 = atoi(params);
+
         params = strtok_r(NULL, "|", &p);
+        if (params == NULL) {
+            cmdMessenger.sendCmd(kStatus, F("Missing custom device pin 2"));
+            return;
+        }
         _pin2 = atoi(params);
+
         params = strtok_r(NULL, "|", &p);
+        if (params == NULL) {
+            cmdMessenger.sendCmd(kStatus, F("Missing custom device pin 3"));
+            return;
+        }
         _pin3 = atoi(params);
 
-        getStringFromMem(adrConfig, parameter, configFromFlash);
-
-        uint16_t Parameter1;
-        char *Parameter2;
-
-        params = strtok_r(parameter, "|", &p);
-        Parameter1 = atoi(params);
-        params = strtok_r(NULL, "|", &p);
-        Parameter2 = params;
-
-        _mydevice = new (allocateMemory(sizeof(myTest))) myTest(_pin1, _pin2);
-        _mydevice->attach(Parameter1, Parameter2);
+        // Construct and initialize the custom device
+        _mydevice = new (allocateMemory(sizeof(myTest))) myTest(_pin1, _pin2, "myTest 2" );
+        _mydevice->attach(_pin3, nullptr);
         _mydevice->begin();
         _initialized = true;
     }
     else {
+        #if 0
         Serial.println("[myTest] EXIT: unsupported device type");
+        #endif
         cmdMessenger.sendCmd(kStatus, F("Custom Device is not supported by this firmware version"));
     }
 }

@@ -1,7 +1,7 @@
 {
     "$schema": "./mfdevice.schema.json",
     "Info": {
-      "Label": "Johan's myTest",
+      "Label": "Johan's myTest 2",
       "Type": "myTest2",
       "Author": "Johan",
       "URL": "https://github.com",
