@@ -1,0 +1,87 @@
+
+{
+  "$schema": "./mfboard.schema.json",
+  "Connection": {
+    "ConnectionDelay": 1250,
+    "ExtraConnectionRetry": false,
+    "ForceResetOnFirmwareUpdate": false,
+    "DelayAfterFirmwareUpdate": 0,
+    "DtrEnable": false,
+    "MessageSize": 90,
+    "EEPROMSize": 1496
+  },
+  "HardwareIds": [
+    "^VID_303A&PID_1001"
+  ],
+  "Info": {
+    "CanInstallFirmware": false,
+    "CanResetBoard": false,
+    "FirmwareBaseName": "johan_mytest_freenove_esp32_s3_fnk0104a",
+    "FirmwareExtension": "bin",
+    "LatestFirmwareVersion": "0.0.1",
+    "FriendlyName": "Johan myTest Freenove",
+    "MobiFlightType": "Johan myTest Freenove",
+    "CustomDeviceTypes": [
+      "myTest",
+      "myTest2"
+    ],
+    "Community": {
+      "Project": "Johan_myTest",
+      "Website": "https://github.com",
+      "Docs": "https://github.com",
+      "Support": "https://github.com"
+    }
+  },
+  "ModuleLimits": {
+    "MaxAnalogInputs": 0,
+    "MaxInputShifters": 0,
+    "MaxButtons": 6,
+    "MaxEncoders": 3,
+    "MaxLcdI2C": 0,
+    "MaxLedSegments": 0,
+    "MaxOutputs": 6,
+    "MaxServos": 0,
+    "MaxShifters": 0,
+    "MaxSteppers": 0,
+    "MaxInputMultiplexer": 0,
+    "MaxCustomDevices": 5
+  },
+  "Pins": [
+    {
+      "isAnalog": false,
+      "isI2C": false,
+      "isPWM": true,
+      "Pin": 2
+    },
+    {
+      "isAnalog": false,
+      "isI2C": false,
+      "isPWM": true,
+      "Pin": 3
+    },
+    {
+      "isAnalog": false,
+      "isI2C": false,
+      "isPWM": true,
+      "Pin": 14
+    },
+    {
+      "isAnalog": false,
+      "isI2C": false,
+      "isPWM": true,
+      "Pin": 21
+    },
+    {
+      "isAnalog": false,
+      "isI2C": false,
+      "isPWM": true,
+      "Pin": 43
+    },
+    {
+      "isAnalog": false,
+      "isI2C": false,
+      "isPWM": true,
+      "Pin": 44
+    }
+  ]
+}
