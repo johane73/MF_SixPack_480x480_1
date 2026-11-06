@@ -8,6 +8,7 @@ class myTest
 {
 public:
     myTest(uint8_t Pin1, uint8_t Pin2, const char *title);
+
     void begin();
     void attach(uint16_t Pin3, char *init);
     void detach();
@@ -18,7 +19,8 @@ public:
     void drawNeedle(int32_t verticalSpeed);
 
 private:
-    bool    _initialised = false;
+    bool _initialised = false;
+
     uint8_t _pin1, _pin2, _pin3;
     const char *_title;
 
@@ -27,4 +29,7 @@ private:
     int32_t _displayedVerticalSpeed = -99999;
 
     TFT_eSPI _tft = TFT_eSPI();
+
+    // Temporary sprite test
+    TFT_eSprite _testSprite;
 };
