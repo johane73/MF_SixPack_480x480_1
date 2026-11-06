@@ -16,12 +16,12 @@ public:
     void update();
 
     void drawVSI();
-    // void drawNeedle(int32_t verticalSpeed);
 
     void drawDial();
     void createNeedleSprite();
     void drawNeedle(int32_t verticalSpeed);
     void drawNeedleHub();
+    // void createDialBackgroundSprite();
 
 private:
     bool _initialised = false;
@@ -34,7 +34,7 @@ private:
     int32_t _displayedVerticalSpeed = -99999;
 
     TFT_eSPI _tft = TFT_eSPI();
-    // TFT_eSprite _backgroundSprite;
     TFT_eSprite _needleSprite;
+    // TFT_eSprite _dialBackgroundSprite;
 
 };
