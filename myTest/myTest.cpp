@@ -3,6 +3,7 @@
 #include "allocateMem.h"
 #include "commandmessenger.h"
 #include <math.h>
+#include <vsi_dial.h>
 
 myTest::myTest(uint8_t Pin1, uint8_t Pin2, const char *title)
     :  _needleSprite(&_tft)
@@ -25,11 +26,14 @@ void myTest::begin()
     _tft.fillScreen(TFT_BLACK);
     _tft.setPivot(160, 115);
 
-    drawDial();
+    _tft.setSwapBytes(true);
+    _tft.pushImage(40, 0, 240, 240, vsiDial);
+
+    // drawDial();
     // createDialBackgroundSprite();
-    createNeedleSprite();
-    drawNeedle(0);
-    drawNeedleHub();
+    // createNeedleSprite();
+    // drawNeedle(0);
+    // drawNeedleHub();
 
     _verticalSpeed = 0;
     _displayedVerticalSpeed = 0;
