@@ -176,21 +176,6 @@ void myTest::createNeedleSprite()
     );
 }
 
-// void myTest::drawVSI()
-// {
-//     if (!_initialised || !_needleSprite.created())
-//         return;
-
-//     if (_verticalSpeed == _displayedVerticalSpeed)
-//         return;
-
-//     _tft.pushImage(40, 0, 240, 240, vsiDial);
-//     drawNeedle(_verticalSpeed);
-
-//     _displayedVerticalSpeed = _verticalSpeed;
-// }
-
-
 void myTest::drawVSI()
 {
     if (!_initialised || !_needleSprite.created())
@@ -233,17 +218,24 @@ void myTest::drawVSI()
     const int y1 = max(0, (int)floorf(minY) - 2);
     const int y2 = min(239, (int)ceilf(maxY) + 2);
 
+    // Begin one shared SPI transaction.
+    _tft.startWrite();
+
+    // Restore the previous needle area.
     for (int y = y1; y <= y2; y++)
     {
         const uint16_t *row = &vsiDial[y * 240 + (x1 - 40)];
         _tft.pushImage(x1, y, x2 - x1 + 1, 1, row);
     }
 
+    // Draw the new needle.
     drawNeedle(_verticalSpeed);
+
+    // Finish the shared SPI transaction.
+    _tft.endWrite();
 
     _displayedVerticalSpeed = _verticalSpeed;
 }
-
 
 void myTest::attach(uint16_t Pin3, char *init)
 {
