@@ -1,4 +1,4 @@
-
+#include <stdlib.h>
 #include "myTest.h"
 #include "allocateMem.h"
 #include "commandmessenger.h"
@@ -24,46 +24,23 @@ void myTest::begin()
     _tft.init();
     _tft.setRotation(1);
     _tft.fillScreen(TFT_BLACK);
-    _tft.setPivot(160, 115);
+
+    _tft.setPivot(160, 120);
 
     _tft.setSwapBytes(true);
     _tft.pushImage(40, 0, 240, 240, vsiDial);
 
-    // drawDial();
-    // createDialBackgroundSprite();
-    // createNeedleSprite();
-    // drawNeedle(0);
-    // drawNeedleHub();
+    createNeedleSprite();
+    if (_needleSprite.created())
+    {
+        drawNeedle(0);
+    }
 
     _verticalSpeed = 0;
     _displayedVerticalSpeed = 0;
 
     _initialised = true;
 }
-
-// void myTest::createDialBackgroundSprite()
-// {
-//     const int x = 90;
-//     const int y = 45;
-//     const int size = 140;
-
-//     _dialBackgroundSprite.setColorDepth(16);
-
-//     if (_dialBackgroundSprite.createSprite(size, size) == nullptr)
-//     {
-//         _tft.fillScreen(TFT_RED);
-//         return;
-//     }
-
-//     // Capture the dial area surrounding the needle.
-//     _tft.readRect(
-//         x,
-//         y,
-//         size,
-//         size,
-//         (uint16_t *)_dialBackgroundSprite.getPointer()
-//     );
-// }
 
 void myTest::drawNeedleHub()
 {
@@ -177,27 +154,40 @@ void myTest::createNeedleSprite()
     }
 
     _needleSprite.setPivot(80, 80);
-
     _needleSprite.fillSprite(TFT_MAGENTA);
 
-    // Main needle body
-    _needleSprite.drawLine(88, 80, 145, 80, TFT_WHITE);
-    _needleSprite.drawLine(88, 79, 140, 79, TFT_WHITE);
-    _needleSprite.drawLine(88, 81, 140, 81, TFT_WHITE);
+    // Broad needle body
+    _needleSprite.fillRect(88, 76, 49, 9, TFT_WHITE);
 
     // Tapered needle tip
     _needleSprite.fillTriangle(
-        145, 80,
-        137, 76,
-        137, 84,
+        137, 73,
+        153, 80,
+        137, 87,
+        TFT_WHITE
+    );
+
+    // Rounded base near the pivot
+    _needleSprite.fillTriangle(
+        88, 76,
+        88, 85,
+        98, 80,
         TFT_WHITE
     );
 }
 
-
 void myTest::drawVSI()
 {
-    // Not used during the temporary sprite test.
+    if (!_initialised || !_needleSprite.created())
+        return;
+
+    if (_verticalSpeed == _displayedVerticalSpeed)
+        return;
+
+    _tft.pushImage(40, 0, 240, 240, vsiDial);
+    drawNeedle(_verticalSpeed);
+
+    _displayedVerticalSpeed = _verticalSpeed;
 }
 
 void myTest::attach(uint16_t Pin3, char *init)
@@ -218,10 +208,17 @@ void myTest::detach()
 
 void myTest::set(int16_t messageID, char *setPoint)
 {
-    // Not used during the temporary sprite test.
+    if (messageID != 0 || setPoint == nullptr)
+        return;
+
+    _verticalSpeed = strtol(setPoint, nullptr, 10);
+    _verticalSpeed = constrain(_verticalSpeed, -4000, 4000);
+
+    // Draw immediately when a new value arrives.
+    drawVSI();
 }
 
 void myTest::update()
 {
-    // Not used during the temporary sprite test.
+    drawVSI();
 }
