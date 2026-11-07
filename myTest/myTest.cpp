@@ -6,7 +6,7 @@
 #include <vsi_dial.h>
 
 myTest::myTest(uint8_t Pin1, uint8_t Pin2, const char *title)
-    :  _needleSprite(&_tft)
+    :   _needleSprite(&_tft)
 {
     _pin1 = Pin1;
     _pin2 = Pin2;
@@ -176,6 +176,21 @@ void myTest::createNeedleSprite()
     );
 }
 
+// void myTest::drawVSI()
+// {
+//     if (!_initialised || !_needleSprite.created())
+//         return;
+
+//     if (_verticalSpeed == _displayedVerticalSpeed)
+//         return;
+
+//     _tft.pushImage(40, 0, 240, 240, vsiDial);
+//     drawNeedle(_verticalSpeed);
+
+//     _displayedVerticalSpeed = _verticalSpeed;
+// }
+
+
 void myTest::drawVSI()
 {
     if (!_initialised || !_needleSprite.created())
@@ -184,11 +199,51 @@ void myTest::drawVSI()
     if (_verticalSpeed == _displayedVerticalSpeed)
         return;
 
-    _tft.pushImage(40, 0, 240, 240, vsiDial);
+    const int16_t oldAngle = static_cast<int16_t>(
+        lroundf(180.0f +
+        (_displayedVerticalSpeed / 4000.0f) * 180.0f)
+    );
+
+    const float rad = -oldAngle * DEG_TO_RAD;
+    const float c = cosf(rad);
+    const float s = sinf(rad);
+
+    const float needleX[] = { 88, 153, 153, 88 };
+    const float needleY[] = { 73, 73, 87, 87 };
+
+    float minX = 1000, minY = 1000;
+    float maxX = -1000, maxY = -1000;
+
+    for (int i = 0; i < 4; i++)
+    {
+        const float dx = needleX[i] - 80;
+        const float dy = needleY[i] - 80;
+
+        const float x = 160 + dx * c - dy * s;
+        const float y = 120 - dx * s + dy * c;
+
+        minX = fminf(minX, x);
+        maxX = fmaxf(maxX, x);
+        minY = fminf(minY, y);
+        maxY = fmaxf(maxY, y);
+    }
+
+    const int x1 = max(40, (int)floorf(minX) - 2);
+    const int x2 = min(279, (int)ceilf(maxX) + 2);
+    const int y1 = max(0, (int)floorf(minY) - 2);
+    const int y2 = min(239, (int)ceilf(maxY) + 2);
+
+    for (int y = y1; y <= y2; y++)
+    {
+        const uint16_t *row = &vsiDial[y * 240 + (x1 - 40)];
+        _tft.pushImage(x1, y, x2 - x1 + 1, 1, row);
+    }
+
     drawNeedle(_verticalSpeed);
 
     _displayedVerticalSpeed = _verticalSpeed;
 }
+
 
 void myTest::attach(uint16_t Pin3, char *init)
 {

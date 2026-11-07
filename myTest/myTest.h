@@ -35,6 +35,5 @@ private:
 
     TFT_eSPI _tft = TFT_eSPI();
     TFT_eSprite _needleSprite;
-    // TFT_eSprite _dialBackgroundSprite;
-
+    
 };
