@@ -119,25 +119,13 @@ void myTest::drawDial()
 
 void myTest::drawNeedle(int32_t verticalSpeed)
 {
-    // const int x = 90;
-    // const int y = 45;
-
-    // verticalSpeed = constrain(verticalSpeed, -4000, 4000);
-
-    // // Restore the original dial underneath the previous needle.
-    // _dialBackgroundSprite.pushSprite(x, y);
-
-    // float angle = 45.0f +
-    //     ((verticalSpeed + 4000) / 8000.0f) * 270.0f;
-
-    // _needleSprite.pushRotated(
-    //     static_cast<int16_t>(lroundf(angle)),
-    //     TFT_MAGENTA
-    // );
     verticalSpeed = constrain(verticalSpeed, -4000, 4000);
 
+    const float calibratedSpeed =
+        calibratedVsiSpeed(verticalSpeed);
+
     float angle = 180.0f +
-        (verticalSpeed / 4000.0f) * 180.0f;
+        (calibratedSpeed / 4000.0f) * 180.0f;
 
     _needleSprite.pushRotated(
         static_cast<int16_t>(lroundf(angle)),
@@ -178,6 +166,41 @@ void myTest::createNeedleSprite()
     );
 }
 
+float myTest::calibratedVsiSpeed(float speed)
+{
+    // Requested speed (what the user selects).
+    const float indicated[] = {
+        0, 560, 1100, 1550, 2000,
+        2470, 2800, 3450, 3800
+    };
+
+    // Effective speed needed by the original linear angle calculation.
+    const float corrected[] = {
+        0, 500, 1000, 1500, 2000,
+        2500, 3000, 3500, 3800
+    };
+
+    const float magnitude = fabsf(speed);
+    float result = magnitude;
+
+    for (int i = 0; i < 8; i++)
+    {
+        if (magnitude <= indicated[i + 1] || i == 7)
+        {
+            const float fraction =
+                (magnitude - indicated[i]) /
+                (indicated[i + 1] - indicated[i]);
+
+            result = corrected[i] +
+                fraction * (corrected[i + 1] - corrected[i]);
+
+            break;
+        }
+    }
+
+    return (speed < 0) ? -result : result;
+}
+
 void myTest::drawVSI()
 {
     if (!_initialised || !_needleSprite.created())
@@ -186,10 +209,14 @@ void myTest::drawVSI()
     if (_verticalSpeed == _displayedVerticalSpeed)
         return;
 
+    const float oldCalibratedSpeed =
+        calibratedVsiSpeed(_displayedVerticalSpeed);
+
     const int16_t oldAngle = static_cast<int16_t>(
         lroundf(180.0f +
-        (_displayedVerticalSpeed / 4000.0f) * 180.0f)
+        (oldCalibratedSpeed / 4000.0f) * 180.0f)
     );
+
 
     const float rad = -oldAngle * DEG_TO_RAD;
     const float c = cosf(rad);

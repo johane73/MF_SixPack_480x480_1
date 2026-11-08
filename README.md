@@ -1,3 +1,8 @@
+VSI dataref: sim/flightmodel/position/vh_ind_fpm
+
+
+
+
 > [!NOTE]  
 > This article is for developers who would like to create their own community device implementation. If you are interested in simply using community devices, check out [this page](https://github.com/MobiFlight/MobiFlight-Connector/wiki/Using-a-pre-build-custom-device)
 

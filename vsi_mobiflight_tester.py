@@ -15,7 +15,7 @@ except ImportError:
 MIN_SPEED = -3800
 MAX_SPEED = 3800
 
-RAMP_RATE = 100          # FPM per second
+RAMP_RATE = 200          # FPM per second
 RAMP_INTERVAL = 100      # milliseconds
 SLIDER_DEBOUNCE = 60     # milliseconds
 

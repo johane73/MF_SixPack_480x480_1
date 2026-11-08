@@ -29,6 +29,8 @@ private:
     uint8_t _pin1, _pin2, _pin3;
     const char *_title;
 
+    float calibratedVsiSpeed(float speed);
+
     // Vertical Speed Indicator
     int32_t _verticalSpeed = 0;
     int32_t _displayedVerticalSpeed = -99999;
