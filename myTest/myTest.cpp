@@ -3,7 +3,8 @@
 #include "allocateMem.h"
 #include "commandmessenger.h"
 #include <math.h>
-#include <vsi_dial.h>
+// #include <vsi_dial.h>
+#include "vsi_bezel_full_height.h"
 
 myTest::myTest(uint8_t Pin1, uint8_t Pin2, const char *title)
     :   _needleSprite(&_tft)
@@ -28,7 +29,8 @@ void myTest::begin()
     _tft.setPivot(160, 120);
 
     _tft.setSwapBytes(true);
-    _tft.pushImage(40, 0, 240, 240, vsiDial);
+    // _tft.pushImage(40, 0, 240, 240, vsiDial);
+    _tft.pushImage(0, 0, 320, 240, vsiDial);
 
     createNeedleSprite();
     if (_needleSprite.created())
@@ -213,25 +215,23 @@ void myTest::drawVSI()
         maxY = fmaxf(maxY, y);
     }
 
-    const int x1 = max(40, (int)floorf(minX) - 2);
-    const int x2 = min(279, (int)ceilf(maxX) + 2);
+    // New background dimensions: 320x240.
+    const int x1 = max(0, (int)floorf(minX) - 2);
+    const int x2 = min(319, (int)ceilf(maxX) + 2);
     const int y1 = max(0, (int)floorf(minY) - 2);
     const int y2 = min(239, (int)ceilf(maxY) + 2);
 
-    // Begin one shared SPI transaction.
     _tft.startWrite();
 
-    // Restore the previous needle area.
+    // Restore the previous needle area from the 320x240 background.
     for (int y = y1; y <= y2; y++)
     {
-        const uint16_t *row = &vsiDial[y * 240 + (x1 - 40)];
+        const uint16_t *row = &vsiDial[y * 320 + x1];
         _tft.pushImage(x1, y, x2 - x1 + 1, 1, row);
     }
 
-    // Draw the new needle.
     drawNeedle(_verticalSpeed);
 
-    // Finish the shared SPI transaction.
     _tft.endWrite();
 
     _displayedVerticalSpeed = _verticalSpeed;
