@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import tkinter as tk
@@ -13,336 +12,405 @@ except ImportError:
     list_ports = None
 
 
-class VsiSerialTester:
+MIN_SPEED = -3800
+MAX_SPEED = 3800
 
+RAMP_RATE = 100          # FPM per second
+RAMP_INTERVAL = 100      # milliseconds
+SLIDER_DEBOUNCE = 60     # milliseconds
+
+
+class VSIApp:
     def __init__(self, root):
         self.root = root
         self.root.title("VSI - MobiFlight Serial Tester")
-        self.root.resizable(False, False)
+        self.root.resizable(True, False)
 
         self.ser = None
-        self.pending_send = None
         self.last_sent = None
+        self.current_value = 0
+
+        self.pending_send = None
+        self.ramp_job = None
+        self.ramp_active = False
+        self.ramp_target = 0
+        self.ramp_position = 0.0
+        self.ramp_last_time = 0.0
 
         self.port_var = tk.StringVar()
         self.baud_var = tk.StringVar(value="115200")
         self.device_var = tk.StringVar(value="0")
         self.message_var = tk.StringVar(value="0")
+
         self.value_var = tk.IntVar(value=0)
+        self.value_label_var = tk.StringVar(value="0 FPM")
+
         self.status_var = tk.StringVar(value="Disconnected")
         self.last_command_var = tk.StringVar(
-            value="No command sent"
+            value="Select a serial port and connect."
         )
+        self.ramp_status_var = tk.StringVar(value="Ramp stopped")
 
-        self._build_ui()
+        self.build_ui()
         self.refresh_ports()
 
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
-        if serial is None:
-            self.root.after(100, self.show_missing_dependency)
+    # ---------------------------------------------------------
+    # User interface
+    # ---------------------------------------------------------
 
-    def show_missing_dependency(self):
-        messagebox.showerror(
-            "Missing dependency",
-            "pyserial is not installed.\n\n"
-            "Install it with:\n"
-            "python3 -m pip install pyserial"
-        )
-
-    def _build_ui(self):
-
-        outer = ttk.Frame(self.root, padding=14)
-        outer.grid(row=0, column=0, sticky="nsew")
+    def build_ui(self):
+        main = ttk.Frame(self.root, padding=10)
+        main.grid(row=0, column=0, sticky="nsew")
 
         # Serial connection
         connection = ttk.LabelFrame(
-            outer, text="Serial connection", padding=10
+            main, text="Serial connection", padding=8
         )
         connection.grid(row=0, column=0, sticky="ew")
 
-        ttk.Label(connection, text="Port").grid(
-            row=0, column=0, sticky="w"
+        ttk.Label(connection, text="Port:").grid(
+            row=0, column=0, padx=4, pady=4
         )
 
-        self.port_box = ttk.Combobox(
+        self.port_combo = ttk.Combobox(
             connection,
             textvariable=self.port_var,
-            width=28,
+            width=24,
             state="readonly"
         )
-        self.port_box.grid(
-            row=0, column=1, padx=6, pady=3
-        )
+        self.port_combo.grid(row=0, column=1, padx=4, pady=4)
 
         ttk.Button(
             connection,
             text="Refresh",
             command=self.refresh_ports
-        ).grid(row=0, column=2)
+        ).grid(row=0, column=2, padx=4, pady=4)
 
-        ttk.Label(connection, text="Baud").grid(
-            row=1, column=0, sticky="w"
+        ttk.Label(connection, text="Baud:").grid(
+            row=0, column=3, padx=4, pady=4
         )
 
         ttk.Entry(
             connection,
             textvariable=self.baud_var,
-            width=10
-        ).grid(row=1, column=1, sticky="w", padx=6)
-
-        ttk.Label(connection, text="Device index").grid(
-            row=2, column=0, sticky="w"
-        )
-
-        ttk.Entry(
-            connection,
-            textvariable=self.device_var,
-            width=10
-        ).grid(row=2, column=1, sticky="w", padx=6)
-
-        ttk.Label(connection, text="Message ID").grid(
-            row=3, column=0, sticky="w"
-        )
-
-        ttk.Entry(
-            connection,
-            textvariable=self.message_var,
-            width=10
-        ).grid(row=3, column=1, sticky="w", padx=6)
+            width=9
+        ).grid(row=0, column=4, padx=4, pady=4)
 
         self.connect_button = ttk.Button(
             connection,
             text="Connect",
-            command=self.toggle_connection
+            command=self.connect
         )
-        self.connect_button.grid(
-            row=0, column=3, rowspan=2,
-            padx=(12, 0), sticky="ns"
-        )
+        self.connect_button.grid(row=0, column=5, padx=4, pady=4)
 
-        ttk.Label(
+        self.status_label = ttk.Label(
             connection,
             textvariable=self.status_var
-        ).grid(row=2, column=3, rowspan=2, padx=12)
-
-        # Vertical speed controls
-        control = ttk.LabelFrame(
-            outer, text="Vertical speed", padding=12
         )
-        control.grid(
-            row=1, column=0, sticky="ew", pady=(12, 0)
+        self.status_label.grid(
+            row=1, column=0, columnspan=6,
+            sticky="w", padx=4, pady=(5, 0)
         )
 
-        value_row = ttk.Frame(control)
-        value_row.grid(row=0, column=0, sticky="ew")
-
-        self.value_label = ttk.Label(
-            value_row,
-            text="0",
-            font=("TkDefaultFont", 28, "bold")
+        # MobiFlight addressing
+        addressing = ttk.LabelFrame(
+            main, text="MobiFlight addressing", padding=8
         )
-        self.value_label.grid(row=0, column=0)
+        addressing.grid(
+            row=1, column=0, sticky="ew", pady=(8, 0)
+        )
+
+        ttk.Label(addressing, text="Device index:").grid(
+            row=0, column=0, padx=4, pady=4
+        )
+
+        ttk.Entry(
+            addressing,
+            textvariable=self.device_var,
+            width=8
+        ).grid(row=0, column=1, padx=4, pady=4)
+
+        ttk.Label(addressing, text="Message ID:").grid(
+            row=0, column=2, padx=4, pady=4
+        )
+
+        ttk.Entry(
+            addressing,
+            textvariable=self.message_var,
+            width=8
+        ).grid(row=0, column=3, padx=4, pady=4)
+
+        # Current value
+        value_frame = ttk.LabelFrame(
+            main, text="Vertical speed", padding=10
+        )
+        value_frame.grid(
+            row=2, column=0, sticky="ew", pady=(8, 0)
+        )
 
         ttk.Label(
-            value_row,
-            text="ft/min",
-            font=("TkDefaultFont", 11)
-        ).grid(row=0, column=1, padx=8, sticky="s")
+            value_frame,
+            textvariable=self.value_label_var,
+            font=("Helvetica", 22, "bold")
+        ).grid(row=0, column=0, pady=(0, 5))
 
-        self.scale = ttk.Scale(
-            control,
-            from_=-1500,
-            to=1500,
-            orient="horizontal",
-            command=self.on_slider
+        self.slider = tk.Scale(
+            value_frame,
+            from_=MAX_SPEED,
+            to=MIN_SPEED,
+            orient=tk.HORIZONTAL,
+            resolution=1,
+            showvalue=False,
+            variable=self.value_var,
+            command=self.on_slider_change,
+            length=650
         )
-        self.scale.grid(
-            row=1, column=0, sticky="ew", pady=12
-        )
-
-        ends = ttk.Frame(control)
-        ends.grid(row=2, column=0, sticky="ew")
-
-        ttk.Label(ends, text="-1500 DN").grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(ends, text="0").grid(row=0, column=1)
-        ttk.Label(ends, text="UP +1500").grid(
-            row=0, column=2, sticky="e"
+        self.slider.grid(
+            row=1, column=0, sticky="ew", padx=5
         )
 
-        buttons = ttk.Frame(control)
-        buttons.grid(
-            row=3, column=0, sticky="ew", pady=(12, 0)
+        value_frame.columnconfigure(0, weight=1)
+
+        # Instant preset buttons
+        instant_frame = ttk.LabelFrame(
+            main, text="Send immediately", padding=8
+        )
+        instant_frame.grid(
+            row=3, column=0, sticky="ew", pady=(8, 0)
         )
 
-        for col in range(5):
-            buttons.columnconfigure(col, weight=1)
+        instant_values = self.get_preset_values()
 
-        for col, value in enumerate(
-            (-1500, -1000, 0, 1000, 1500)
-        ):
-            label = f"{value:+d}" if value else "ZERO"
-
+        for column, value in enumerate(instant_values):
             ttk.Button(
-                buttons,
-                text=label,
+                instant_frame,
+                text=f"{value:+d}",
+                width=7,
                 command=lambda v=value: self.set_value(v)
-            ).grid(row=0, column=col, padx=3, sticky="ew")
+            ).grid(
+                row=0, column=column,
+                padx=2, pady=3, sticky="ew"
+            )
+
+        for column in range(len(instant_values)):
+            instant_frame.columnconfigure(column, weight=1)
+
+        # Gradual movement buttons
+        ramp_frame = ttk.LabelFrame(
+            main,
+            text=f"Gradual movement ({RAMP_RATE} FPM/second)",
+            padding=8
+        )
+        ramp_frame.grid(
+            row=4, column=0, sticky="ew", pady=(8, 0)
+        )
+
+        for column, value in enumerate(instant_values):
+            ttk.Button(
+                ramp_frame,
+                text=f"{value:+d}",
+                width=7,
+                command=lambda v=value: self.start_ramp(v)
+            ).grid(
+                row=0, column=column,
+                padx=2, pady=3, sticky="ew"
+            )
+
+        for column in range(len(instant_values)):
+            ramp_frame.columnconfigure(column, weight=1)
+
+        ramp_controls = ttk.Frame(ramp_frame)
+        ramp_controls.grid(
+            row=1, column=0, columnspan=len(instant_values),
+            sticky="ew", pady=(8, 0)
+        )
+
+        ttk.Button(
+            ramp_controls,
+            text="Ramp to slider value",
+            command=self.start_ramp_to_slider
+        ).pack(side=tk.LEFT, padx=4)
+
+        ttk.Button(
+            ramp_controls,
+            text="STOP",
+            command=self.stop_ramp
+        ).pack(side=tk.LEFT, padx=4)
 
         ttk.Label(
-            outer,
-            textvariable=self.last_command_var,
-            wraplength=520
-        ).grid(row=2, column=0, sticky="w", pady=10)
+            ramp_controls,
+            textvariable=self.ramp_status_var
+        ).pack(side=tk.LEFT, padx=12)
 
-        # Activity log
-        log_frame = ttk.LabelFrame(
-            outer, text="Activity", padding=8
+        # Transmission information
+        transmission = ttk.LabelFrame(
+            main, text="Transmission", padding=8
         )
-        log_frame.grid(row=3, column=0, sticky="ew")
+        transmission.grid(
+            row=5, column=0, sticky="ew", pady=(8, 0)
+        )
+
+        ttk.Label(
+            transmission,
+            textvariable=self.last_command_var
+        ).grid(row=0, column=0, sticky="w")
 
         self.log = tk.Text(
-            log_frame,
-            width=68,
-            height=6,
-            state="disabled"
+            transmission,
+            height=7,
+            width=85,
+            state="disabled",
+            font=("Menlo", 10)
         )
-        self.log.grid(row=0, column=0, sticky="ew")
+        self.log.grid(
+            row=1, column=0, sticky="ew", pady=(6, 0)
+        )
 
-    def log_line(self, text):
-        self.log.configure(state="normal")
-        self.log.insert("end", text + "\n")
-        self.log.see("end")
-        self.log.configure(state="disabled")
+        transmission.columnconfigure(0, weight=1)
+
+    # ---------------------------------------------------------
+    # Presets
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def get_preset_values():
+        # Include both endpoints as well as 500-FPM increments.
+        values = list(range(-3500, 3501, 500))
+        values.extend([MIN_SPEED, MAX_SPEED])
+        return sorted(set(values))
+
+    # ---------------------------------------------------------
+    # Serial ports
+    # ---------------------------------------------------------
 
     def refresh_ports(self):
         if list_ports is None:
+            self.port_combo["values"] = []
+            self.status_var.set(
+                "pyserial is not installed in this Python environment."
+            )
             return
 
-        ports = [
-            p.device for p in list_ports.comports()
-        ]
+        ports = list(list_ports.comports())
+        port_names = [port.device for port in ports]
 
-        self.port_box["values"] = ports
+        self.port_combo["values"] = port_names
 
-        if self.port_var.get() not in ports:
+        if self.port_var.get() not in port_names:
             preferred = next(
                 (
-                    p for p in ports
-                    if "usbmodem" in p or "usbserial" in p
+                    port for port in port_names
+                    if "usbmodem" in port.lower()
                 ),
-                ports[0] if ports else ""
+                None
             )
-            self.port_var.set(preferred)
 
-    def toggle_connection(self):
-        if self.ser and self.ser.is_open:
-            self.disconnect()
-        else:
-            self.connect()
+            if preferred:
+                self.port_var.set(preferred)
+            elif port_names:
+                self.port_var.set(port_names[0])
+            else:
+                self.port_var.set("")
 
     def connect(self):
-
         if serial is None:
-            self.show_missing_dependency()
+            messagebox.showerror(
+                "Missing dependency",
+                "pyserial is not installed.\n\n"
+                "Install it using:\n"
+                ".venv-vsi/bin/python -m pip install pyserial"
+            )
+            return
+
+        if self.ser and self.ser.is_open:
+            self.disconnect()
             return
 
         port = self.port_var.get().strip()
 
         if not port:
             messagebox.showwarning(
-                "Select a port",
-                "Choose the ESP32 serial port."
+                "No serial port",
+                "Please select a serial port."
             )
             return
 
         try:
             baud = int(self.baud_var.get())
-            device = int(self.device_var.get())
-            message = int(self.message_var.get())
 
-            if baud <= 0 or device < 0 or message < 0:
-                raise ValueError
-
-        except ValueError:
-            messagebox.showerror(
-                "Invalid settings",
-                "Check baud rate, device index and message ID."
+            self.ser = serial.Serial(
+                port=port,
+                baudrate=baud,
+                timeout=0.1,
+                write_timeout=1
             )
-            return
 
-        try:
-            self.ser = serial.Serial()
-            self.ser.port = port
-            self.ser.baudrate = baud
-            self.ser.timeout = 0.1
-            self.ser.write_timeout = 1
-
-            # Avoid deliberately asserting control lines.
+            # Avoid resetting the ESP32 when opening the port.
             self.ser.dtr = False
             self.ser.rts = False
 
-            self.ser.open()
-
-            time.sleep(0.15)
-            self.ser.reset_input_buffer()
-
             self.status_var.set(f"Connected: {port}")
             self.connect_button.configure(text="Disconnect")
-
-            self.log_line(
-                f"Connected to {port} at {baud} baud."
-            )
+            self.log_line(f"Connected to {port} at {baud} baud")
 
             self.last_sent = None
 
         except Exception as exc:
             self.ser = None
+            self.status_var.set("Connection failed")
             messagebox.showerror(
-                "Serial connection failed", str(exc)
+                "Serial connection error",
+                str(exc)
             )
-            self.status_var.set("Disconnected")
 
     def disconnect(self):
-        try:
-            if self.ser:
-                self.ser.close()
-        except Exception:
-            pass
+        self.stop_ramp()
+
+        if self.ser:
+            try:
+                if self.ser.is_open:
+                    self.ser.close()
+            except Exception:
+                pass
 
         self.ser = None
-        self.status_var.set("Disconnected")
         self.connect_button.configure(text="Connect")
-        self.log_line("Disconnected.")
+        self.status_var.set("Disconnected")
+        self.log_line("Disconnected")
 
-    def on_slider(self, raw_value):
+    # ---------------------------------------------------------
+    # Value selection
+    # ---------------------------------------------------------
 
-        value = int(round(float(raw_value)))
+    def on_slider_change(self, value):
+        self.stop_ramp()
 
-        self.value_var.set(value)
+        selected = int(float(value))
+        self.current_value = selected
+        self.value_label_var.set(f"{selected:+d} FPM")
 
-        self.value_label.configure(
-            text=f"{value:+d}" if value else "0"
-        )
-
-        # Coalesce rapid slider events.
         if self.pending_send is not None:
             self.root.after_cancel(self.pending_send)
 
         self.pending_send = self.root.after(
-            60, self.send_current_value
+            SLIDER_DEBOUNCE,
+            self.send_slider_value
         )
+
+    def send_slider_value(self):
+        self.pending_send = None
+        self.send_value(self.current_value)
 
     def set_value(self, value):
+        self.stop_ramp()
 
-        self.scale.set(value)
+        value = max(MIN_SPEED, min(MAX_SPEED, int(value)))
+
+        self.current_value = value
         self.value_var.set(value)
-
-        self.value_label.configure(
-            text=f"{value:+d}" if value else "0"
-        )
+        self.value_label_var.set(f"{value:+d} FPM")
 
         if self.pending_send is not None:
             self.root.after_cancel(self.pending_send)
@@ -350,27 +418,115 @@ class VsiSerialTester:
 
         self.send_value(value)
 
-    def send_current_value(self):
-        self.pending_send = None
-        self.send_value(self.value_var.get())
+    # ---------------------------------------------------------
+    # Gradual movement
+    # ---------------------------------------------------------
+
+    def start_ramp_to_slider(self):
+        self.start_ramp(int(self.value_var.get()))
+
+    def start_ramp(self, target):
+        target = max(MIN_SPEED, min(MAX_SPEED, int(target)))
+
+        self.stop_ramp()
+
+        if self.pending_send is not None:
+            self.root.after_cancel(self.pending_send)
+            self.pending_send = None
+
+        self.ramp_target = target
+        self.ramp_position = float(self.current_value)
+        self.ramp_last_time = time.monotonic()
+        self.ramp_active = True
+
+        self.ramp_status_var.set(
+            f"Moving to {target:+d} FPM..."
+        )
+
+        if int(round(self.ramp_position)) == target:
+            self.set_value(target)
+            self.ramp_status_var.set("Already at target")
+            return
+
+        self.ramp_job = self.root.after(
+            RAMP_INTERVAL,
+            self.ramp_tick
+        )
+
+    def ramp_tick(self):
+        self.ramp_job = None
+
+        if not self.ramp_active:
+            return
+
+        now = time.monotonic()
+        elapsed = now - self.ramp_last_time
+        self.ramp_last_time = now
+
+        distance = self.ramp_target - self.ramp_position
+        max_step = RAMP_RATE * elapsed
+
+        if abs(distance) <= max_step:
+            self.ramp_position = float(self.ramp_target)
+        elif distance > 0:
+            self.ramp_position += max_step
+        else:
+            self.ramp_position -= max_step
+
+        value = int(round(self.ramp_position))
+
+        self.current_value = value
+        self.value_var.set(value)
+        self.value_label_var.set(f"{value:+d} FPM")
+
+        self.send_value(value)
+
+        if value == self.ramp_target:
+            self.ramp_active = False
+            self.ramp_status_var.set(
+                f"Reached {self.ramp_target:+d} FPM"
+            )
+            return
+
+        self.ramp_job = self.root.after(
+            RAMP_INTERVAL,
+            self.ramp_tick
+        )
+
+    def stop_ramp(self):
+        if self.ramp_job is not None:
+            try:
+                self.root.after_cancel(self.ramp_job)
+            except tk.TclError:
+                pass
+
+            self.ramp_job = None
+
+        was_active = self.ramp_active
+        self.ramp_active = False
+
+        if was_active:
+            self.ramp_status_var.set(
+                f"Stopped at {self.current_value:+d} FPM"
+            )
+
+    # ---------------------------------------------------------
+    # CmdMessenger transmission
+    # ---------------------------------------------------------
 
     def send_value(self, value):
-
         if not self.ser or not self.ser.is_open:
             self.last_command_var.set(
                 "Not connected - value selected but not transmitted."
             )
-            return
+            return False
 
         try:
             device = int(self.device_var.get())
             message = int(self.message_var.get())
 
-            # MobiFlight SetCustomDevice command format.
-            # command = (
-            #     f"SetCustomDevice <32,{device},{message},"
-            #     f"{value:+d};>\n"
-            # )
+            # MobiFlight SetCustomDevice command:
+            # 32, device index, message ID, value;
             command = f"32,{device},{message},{value};"
 
             self.ser.write(command.encode("ascii"))
@@ -384,25 +540,51 @@ class VsiSerialTester:
                 self.log_line(command.strip())
                 self.last_sent = value
 
+            return True
+
         except Exception as exc:
             self.log_line(f"Serial write error: {exc}")
             self.status_var.set("Serial error")
+            return False
+
+    # ---------------------------------------------------------
+    # Log
+    # ---------------------------------------------------------
+
+    def log_line(self, text):
+        timestamp = time.strftime("%H:%M:%S")
+
+        self.log.configure(state="normal")
+        self.log.insert(
+            tk.END,
+            f"[{timestamp}] {text}\n"
+        )
+        self.log.see(tk.END)
+        self.log.configure(state="disabled")
+
+    # ---------------------------------------------------------
+    # Shutdown
+    # ---------------------------------------------------------
 
     def close(self):
-
         if self.pending_send is not None:
-            self.root.after_cancel(self.pending_send)
+            try:
+                self.root.after_cancel(self.pending_send)
+            except tk.TclError:
+                pass
 
+            self.pending_send = None
+
+        self.stop_ramp()
         self.disconnect()
         self.root.destroy()
 
 
 def main():
     root = tk.Tk()
-    VsiSerialTester(root)
+    VSIApp(root)
     root.mainloop()
 
 
 if __name__ == "__main__":
     main()
-
