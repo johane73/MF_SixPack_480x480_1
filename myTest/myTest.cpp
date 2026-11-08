@@ -1,14 +1,13 @@
+#include <stdlib.h>
 #include "myTest.h"
 #include "allocateMem.h"
 #include "commandmessenger.h"
 #include <math.h>
-
-/* **********************************************************************************
-    This is just the basic code to set up your custom device.
-    Change/add your code as needed.
-********************************************************************************** */
+// #include <vsi_dial.h>
+#include "vsi_bezel_full_height.h"
 
 myTest::myTest(uint8_t Pin1, uint8_t Pin2, const char *title)
+    :   _needleSprite(&_tft)
 {
     _pin1 = Pin1;
     _pin2 = Pin2;
@@ -25,9 +24,19 @@ void myTest::begin()
 
     _tft.init();
     _tft.setRotation(1);
+    _tft.fillScreen(TFT_BLACK);
 
-    drawVSI();
-    drawNeedle(0);
+    _tft.setPivot(160, 120);
+
+    _tft.setSwapBytes(true);
+    // _tft.pushImage(40, 0, 240, 240, vsiDial);
+    _tft.pushImage(0, 0, 320, 240, vsiDial);
+
+    createNeedleSprite();
+    if (_needleSprite.created())
+    {
+        drawNeedle(0);
+    }
 
     _verticalSpeed = 0;
     _displayedVerticalSpeed = 0;
@@ -35,90 +44,225 @@ void myTest::begin()
     _initialised = true;
 }
 
-void myTest::drawVSI()
+void myTest::drawNeedleHub()
+{
+    _tft.fillCircle(160, 115, 7, TFT_WHITE);
+    _tft.fillCircle(160, 115, 3, TFT_DARKGREY);
+}
+
+void myTest::drawDial()
 {
     const int cx = 160;
     const int cy = 115;
-    const int radius = 95;
+    const int radius = 105;
 
     _tft.fillScreen(TFT_BLACK);
 
-    // Instrument outer bezel
-    _tft.drawCircle(cx, cy, radius, TFT_WHITE);
-    _tft.drawCircle(cx, cy, radius - 2, TFT_DARKGREY);
+    // Outer instrument bezel
+    _tft.drawCircle(cx, cy, radius, TFT_DARKGREY);
+    _tft.drawCircle(cx, cy, radius - 2, TFT_WHITE);
+    _tft.drawCircle(cx, cy, radius - 4, TFT_DARKGREY);
 
-    // Draw 13 scale marks over a 270-degree arc.
-    for (int i = 0; i <= 12; i++)
+    // Scale markings: -4000 to +4000 FPM
+    // 500 FPM minor intervals, 1000 FPM major intervals.
+    for (int speed = -4000; speed <= 4000; speed += 500)
     {
-        float angle = (135.0f + i * 22.5f) * DEG_TO_RAD;
+        // float angle = (180.0f + speed * 135.0f / 4000.0f)
+        //               * DEG_TO_RAD;
+        float angle = (180.0f + speed * 180.0f / 4000.0f)
+              * DEG_TO_RAD;
 
-        int x1 = cx + cosf(angle) * 76;
-        int y1 = cy + sinf(angle) * 76;
-        int x2 = cx + cosf(angle) * 88;
-        int y2 = cy + sinf(angle) * 88;
+        bool major = (speed % 1000 == 0);
+
+        int innerRadius = major ? 78 : 84;
+        int outerRadius = 96;
+
+        int x1 = cx + lroundf(cosf(angle) * innerRadius);
+        int y1 = cy + lroundf(sinf(angle) * innerRadius);
+
+        int x2 = cx + lroundf(cosf(angle) * outerRadius);
+        int y2 = cy + lroundf(sinf(angle) * outerRadius);
 
         _tft.drawLine(x1, y1, x2, y2, TFT_WHITE);
     }
 
-    // Scale labels
+    // Number labels
     _tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    _tft.setTextSize(2);
     _tft.setTextDatum(MC_DATUM);
-
-    _tft.drawString("-2", 237, 173);
-    _tft.drawString("-1", 107, 211);
-    _tft.drawString("0", 65, 115);
-    _tft.drawString("+1", 107, 20);
-    _tft.drawString("+2", 237, 49);
-
-    // Instrument title
     _tft.setTextSize(2);
-    _tft.drawString("VSI", 160, 190);
 
-    // Units
+    for (int speed = -4000; speed <= 4000; speed += 1000)
+    {
+        float angle = (180.0f + speed * 180.0f / 4000.0f)
+                      * DEG_TO_RAD;
+
+        int labelRadius = 66;
+
+        int x = cx + lroundf(cosf(angle) * labelRadius);
+        int y = cy + lroundf(sinf(angle) * labelRadius);
+
+        char label[4];
+        snprintf(label, sizeof(label), "%d", abs(speed) / 1000);
+
+        _tft.drawString(label, x, y);
+    }
+
+    // Instrument text
     _tft.setTextSize(1);
-    _tft.drawString("x1000 FT/MIN", 160, 211);
+    _tft.drawString("VERTICAL SPEED", cx, 91);
+    _tft.drawString("FT / MIN", cx, 103);
+
+    _tft.setTextSize(2);
+    _tft.drawString("UP", 160, 143);
+    _tft.drawString("DN", 160, 163);
 }
 
 void myTest::drawNeedle(int32_t verticalSpeed)
 {
-    const int cx = 160;
-    const int cy = 115;
+    verticalSpeed = constrain(verticalSpeed, -4000, 4000);
 
-    // Limit the displayed value to the instrument range.
-    verticalSpeed = constrain(verticalSpeed, -2000, 2000);
+    const float calibratedSpeed =
+        calibratedVsiSpeed(verticalSpeed);
 
-    // Map -2000...+2000 to 135...405 degrees.
-    // Zero is straight up; positive values move clockwise.
-    float angle = (45.0f +
-        ((verticalSpeed + 2000) / 4000.0f) * 270.0f) * DEG_TO_RAD;
+    float angle = 180.0f +
+        (calibratedSpeed / 4000.0f) * 180.0f;
 
-    // Red needle
-    // int needleX = cx + cosf(angle) * 70;
-    // int needleY = cy + sinf(angle) * 70;
-    int needleX = lroundf(cx + cosf(angle) * 70);
-    int needleY = lroundf(cy + sinf(angle) * 70);
-
-    _tft.drawLine(cx, cy, needleX, needleY, TFT_RED);
-
-    _tft.fillCircle(cx, cy, 6, TFT_WHITE);
-    _tft.fillCircle(cx, cy, 3, TFT_RED);
-
-
-    // Digital vertical speed readout
-    _tft.fillRect(105, 145, 110, 25, TFT_BLACK);
-
-    _tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    _tft.setTextSize(2);
-    _tft.setTextDatum(MC_DATUM);
-
-    char valueText[16];
-    snprintf(valueText, sizeof(valueText), "%+ld",
-             (long)verticalSpeed);
-
-    _tft.drawString(valueText, 160, 157);
+    _needleSprite.pushRotated(
+        static_cast<int16_t>(lroundf(angle)),
+        TFT_MAGENTA
+    );
 }
 
+void myTest::createNeedleSprite()
+{
+    _needleSprite.setColorDepth(16);
+
+    if (_needleSprite.createSprite(160, 160) == nullptr)
+    {
+        _tft.fillScreen(TFT_RED);
+        return;
+    }
+
+    _needleSprite.setPivot(80, 80);
+    _needleSprite.fillSprite(TFT_MAGENTA);
+
+    // Broad needle body
+    _needleSprite.fillRect(88, 76, 49, 9, TFT_WHITE);
+
+    // Tapered needle tip
+    _needleSprite.fillTriangle(
+        137, 73,
+        153, 80,
+        137, 87,
+        TFT_WHITE
+    );
+
+    // Rounded base near the pivot
+    _needleSprite.fillTriangle(
+        88, 76,
+        88, 85,
+        98, 80,
+        TFT_WHITE
+    );
+}
+
+float myTest::calibratedVsiSpeed(float speed)
+{
+    // Requested speed (what the user selects).
+    const float indicated[] = {
+        0, 560, 1100, 1550, 2000,
+        2470, 2800, 3450, 3800
+    };
+
+    // Effective speed needed by the original linear angle calculation.
+    const float corrected[] = {
+        0, 500, 1000, 1500, 2000,
+        2500, 3000, 3500, 3800
+    };
+
+    const float magnitude = fabsf(speed);
+    float result = magnitude;
+
+    for (int i = 0; i < 8; i++)
+    {
+        if (magnitude <= indicated[i + 1] || i == 7)
+        {
+            const float fraction =
+                (magnitude - indicated[i]) /
+                (indicated[i + 1] - indicated[i]);
+
+            result = corrected[i] +
+                fraction * (corrected[i + 1] - corrected[i]);
+
+            break;
+        }
+    }
+
+    return (speed < 0) ? -result : result;
+}
+
+void myTest::drawVSI()
+{
+    if (!_initialised || !_needleSprite.created())
+        return;
+
+    if (_verticalSpeed == _displayedVerticalSpeed)
+        return;
+
+    const float oldCalibratedSpeed =
+        calibratedVsiSpeed(_displayedVerticalSpeed);
+
+    const int16_t oldAngle = static_cast<int16_t>(
+        lroundf(180.0f +
+        (oldCalibratedSpeed / 4000.0f) * 180.0f)
+    );
+
+
+    const float rad = -oldAngle * DEG_TO_RAD;
+    const float c = cosf(rad);
+    const float s = sinf(rad);
+
+    const float needleX[] = { 88, 153, 153, 88 };
+    const float needleY[] = { 73, 73, 87, 87 };
+
+    float minX = 1000, minY = 1000;
+    float maxX = -1000, maxY = -1000;
+
+    for (int i = 0; i < 4; i++)
+    {
+        const float dx = needleX[i] - 80;
+        const float dy = needleY[i] - 80;
+
+        const float x = 160 + dx * c - dy * s;
+        const float y = 120 - dx * s + dy * c;
+
+        minX = fminf(minX, x);
+        maxX = fmaxf(maxX, x);
+        minY = fminf(minY, y);
+        maxY = fmaxf(maxY, y);
+    }
+
+    // New background dimensions: 320x240.
+    const int x1 = max(0, (int)floorf(minX) - 2);
+    const int x2 = min(319, (int)ceilf(maxX) + 2);
+    const int y1 = max(0, (int)floorf(minY) - 2);
+    const int y2 = min(239, (int)ceilf(maxY) + 2);
+
+    _tft.startWrite();
+
+    // Restore the previous needle area from the 320x240 background.
+    for (int y = y1; y <= y2; y++)
+    {
+        const uint16_t *row = &vsiDial[y * 320 + x1];
+        _tft.pushImage(x1, y, x2 - x1 + 1, 1, row);
+    }
+
+    drawNeedle(_verticalSpeed);
+
+    _tft.endWrite();
+
+    _displayedVerticalSpeed = _verticalSpeed;
+}
 
 void myTest::attach(uint16_t Pin3, char *init)
 {
@@ -130,67 +274,25 @@ void myTest::detach()
     if (!_initialised)
         return;
 
+    _needleSprite.deleteSprite();
     _tft.fillScreen(TFT_BLACK);
+
     _initialised = false;
 }
 
 void myTest::set(int16_t messageID, char *setPoint)
 {
-    // Connector shutdown
-    if (messageID == -1)
-    {
-        _tft.fillScreen(TFT_BLACK);
+    if (messageID != 0 || setPoint == nullptr)
         return;
-    }
 
-    // Power-saving mode
-    if (messageID == -2)
-    {
-        if (setPoint != nullptr && atoi(setPoint) == 1)
-        {
-            _tft.fillScreen(TFT_BLACK);
-        }
-        else
-        {
-            _displayedVerticalSpeed = -99999;
-        }
-        return;
-    }
+    _verticalSpeed = strtol(setPoint, nullptr, 10);
+    _verticalSpeed = constrain(_verticalSpeed, -4000, 4000);
 
-    // Message ID 0: Vertical Speed in ft/min
-    // if (messageID == 0 && setPoint != nullptr)
-    // {
-    //     _verticalSpeed = atoi(setPoint);
-
-    //     // Clamp to the instrument's range.
-    //     _verticalSpeed = constrain(_verticalSpeed, -2000, 2000);
-    // }
-
-    if (messageID == 0 && setPoint != nullptr)
-    {
-        _verticalSpeed = atoi(setPoint);
-        _verticalSpeed = constrain(_verticalSpeed, -2000, 2000);
-
-        drawVSI();
-        drawNeedle(_verticalSpeed);
-
-        _displayedVerticalSpeed = _verticalSpeed;
-    }
+    // Draw immediately when a new value arrives.
+    drawVSI();
 }
 
 void myTest::update()
 {
-    if (!_initialised)
-        return;
-
-    if (_verticalSpeed != _displayedVerticalSpeed)
-    {
-        // Redraw the face to erase the previous needle.
-        drawVSI();
-
-        // Draw the needle at the new vertical speed.
-        drawNeedle(_verticalSpeed);
-
-        _displayedVerticalSpeed = _verticalSpeed;
-    }
+    drawVSI();
 }
